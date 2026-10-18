@@ -18,6 +18,8 @@
    #:assert-t
    #:assert-t*
    #:assert-nil
+   #:assert-equal
+   #:assert-condition
    #:assert-string-match)
   (:export
    #:run-all-tests))

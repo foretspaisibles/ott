@@ -43,7 +43,8 @@
 	       #:org.melusina.atelier)
   :components
   ((:module "libexec/lisp"
-    :components ((:file "development")))))
+    :components ((:file "development")
+		 (:file "aws")))))
 
 (asdf:defsystem #:ott/acceptance
   :description "Acceptance tests for OTT"
@@ -57,7 +58,8 @@
   ((:module "acceptance"
     :components ((:file "package")
 		 (:file "utilities")
-		 (:file "tests")
+		 (:file "bootstrap")
+		 (:file "setup-aws-and-github-actions")
 		 (:file "entrypoint")))))
 
 ;;;; End of file `ott.asd'

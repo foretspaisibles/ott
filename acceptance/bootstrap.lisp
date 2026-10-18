@@ -1,4 +1,4 @@
-;;;; tests.lisp — Acceptance tests for OTT
+;;;; bootstrap.lisp — Acceptance tests for OTT Project Bootstrapping
 
 ;;;; OTT (https://github.com/foretspaisibles/ott)
 ;;;; This file is part of OTT.
@@ -80,4 +80,13 @@
     (assert-t (eq status :external))
     (assert-t* (fboundp symbol))))
 
-;;;; End of file `tests.lisp'
+(define-testcase bootstrap ()
+  (build-ott-system-without-warnings)
+  (lint-ott-system-without-warnings)
+  (build-ott-documentation-without-warnings)
+  (test-ott-system-succesfully)
+  (review-ott-readme)
+  (enforce-ott-sibling-systems)
+  (enforce-ott-acceptance-run-all-tests))
+
+;;;; End of file `bootstrap.lisp'

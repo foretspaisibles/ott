@@ -14,10 +14,24 @@
 (defpackage #:ott/development
   (:use #:common-lisp)
   (:export
+   #:*aws-account*
+   #:*aws-program*
+   #:*clock*
+   #:*getenv*
+   #:*gh-program*
+   #:*github-organization*
+   #:*github-repository*
+   #:*github-subject*
+   #:aws-setup-error
    #:configure
+   #:describe-aws-setup
+   #:extend-aws-lease
    #:install-pre-commit-hook
    #:lint
    #:make-documentation
+   #:setup-aws
+   #:setup-github-action
+   #:tear-down-aws
    #+quicklisp
    #:reload))
 
@@ -58,6 +72,7 @@ The vendored file libexec/lisp/docstrings.lisp is not linted."
 	#p"doc"
 	#p"libexec/git"
 	#p"libexec/lisp/development.lisp"
+	#p"libexec/lisp/aws.lisp"
 	#p"src"
 	#p"testsuite")))))
 

@@ -31,3 +31,23 @@ MCP Auth Token: TOKEN
 ```bash
 claude mcp add --transport http cl-mcp http://127.0.0.1:3000/mcp --header 'Authorization: Bearer TOKEN'
 ```
+
+## Setup the repository secrets
+
+The workflow `.github/workflows/describe-aws-setup.yml` reads three
+repository secrets: `AWS_ACCOUNT_ID`, `AWS_REGION` and `AWS_ROLE_ARN`.
+Run `OTT/DEVELOPMENT:SETUP-AWS` with the AWS CLI authenticated on the
+target account and the environment variables `AWS_ACCOUNT_ID`,
+`GITHUB_ORG` and `GITHUB_REPO` set. The function returns the ARN of
+the role GitHub Actions assumes. Then run
+`OTT/DEVELOPMENT:SETUP-GITHUB-ACTION` with the GitHub CLI
+authenticated on the repository: it reads the output of
+`OTT/DEVELOPMENT:DESCRIBE-AWS-SETUP` and stores the three secrets
+with `gh secret set`. It returns the names of the secrets, and
+signals an error without setting anything when the AWS setup does
+not exist. You can also set the secrets in the repository settings
+under *Secrets and variables*, *Actions*.
+
+The setup expires after one week: extend it with
+`OTT/DEVELOPMENT:EXTEND-AWS-LEASE` and reclaim it with
+`OTT/DEVELOPMENT:TEAR-DOWN-AWS`.

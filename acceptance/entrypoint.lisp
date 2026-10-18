@@ -14,12 +14,7 @@
 (in-package #:ott/acceptance)
 
 (define-testcase run-all-tests ()
-  (build-ott-system-without-warnings)
-  (lint-ott-system-without-warnings)
-  (build-ott-documentation-without-warnings)
-  (test-ott-system-succesfully)
-  (review-ott-readme)
-  (enforce-ott-sibling-systems)
-  (enforce-ott-acceptance-run-all-tests))
+  (bootstrap)
+  (setup-aws-and-github-actions))
 
 ;;;; End of file `entrypoint.lisp'
