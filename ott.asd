@@ -15,11 +15,15 @@
   :description "OBI Meetup talk: centralised business logic in a decentralized architecture"
   :author "Michaël Le Barbier"
   :license "MIT License"
-  :depends-on (#:alexandria)
+  :depends-on (#:alexandria
+	       #:uiop
+	       #:yason)
   :components
   ((:module "src"
     :components ((:file "package")
                  (:file "utilities")
+		 (:file "queue")
+		 (:file "events")
 		 (:file "entrypoint")))))
 
 (asdf:defsystem #:ott/testsuite
@@ -46,20 +50,32 @@
     :components ((:file "development")
 		 (:file "aws")))))
 
+(asdf:defsystem #:ott/operation
+  :description "Create and destroy the OTT infrastructure"
+  :author "Michaël Le Barbier"
+  :license "MIT License"
+  :depends-on (#:ott)
+  :components
+  ((:module "libexec/lisp"
+    :components ((:file "operation")))))
+
 (asdf:defsystem #:ott/acceptance
   :description "Acceptance tests for OTT"
   :author "Michaël Le Barbier"
   :license "MIT License"
   :depends-on (#:alexandria
 	       #:org.melusina.confidence
+	       #+sbcl (:require "sb-posix")
+	       #:ott/testsuite
 	       #:ott/development
-	       #:ott/testsuite)
+	       #:ott/operation)
   :components
   ((:module "acceptance"
     :components ((:file "package")
 		 (:file "utilities")
 		 (:file "bootstrap")
 		 (:file "setup-aws-and-github-actions")
+		 (:file "create-infrastructure")
 		 (:file "entrypoint")))))
 
 ;;;; End of file `ott.asd'

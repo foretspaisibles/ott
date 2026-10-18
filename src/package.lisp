@@ -14,7 +14,33 @@
 (defpackage #:ott
   (:use #:common-lisp)
   (:export
-  ))
+   #:*aws-program*
+   #:*clock*
+   #:*queue-name*
+   #:*role-name*
+   #:aws-error
+   #:delete-message
+   #:dispatch
+   #:event-id
+   #:event-json
+   #:event-payload
+   #:event-type
+   #:handle-a
+   #:handle-b
+   #:listen-loop
+   #:listen-once
+   #:make-b-from
+   #:make-event
+   #:message-body
+   #:message-id
+   #:message-receipt-handle
+   #:message-receive-count
+   #:parse-event
+   #:queue-url
+   #:receive-message
+   #:send-a
+   #:send-message
+   #:unknown-event-type))
 
 (in-package #:ott)
 

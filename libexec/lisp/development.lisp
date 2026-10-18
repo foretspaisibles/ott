@@ -73,6 +73,7 @@ The vendored file libexec/lisp/docstrings.lisp is not linted."
 	#p"libexec/git"
 	#p"libexec/lisp/development.lisp"
 	#p"libexec/lisp/aws.lisp"
+	#p"libexec/lisp/operation.lisp"
 	#p"src"
 	#p"testsuite")))))
 

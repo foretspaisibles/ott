@@ -358,7 +358,7 @@
 		     (ott/development:setup-github-action)))
      (assert-equal
       `("secret set AWS_ACCOUNT_ID --repo Example-Org/example-repo=123456789012"
-	"secret set AWS_REGION --repo Example-Org/example-repo=eu-west-1"
+	"secret set AWS_REGION --repo Example-Org/example-repo=eu-west-3"
 	,(concatenate 'string
 		      "secret set AWS_ROLE_ARN --repo Example-Org/example-repo="
 		      "arn:aws:iam::123456789012:role/ott-github-actions-Example-Org-example-repo"))

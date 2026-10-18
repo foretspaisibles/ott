@@ -1,0 +1,65 @@
+# destroy-infrastructure.yml — Destroy infrastructure
+
+# OTT (https://github.com/foretspaisibles/ott)
+# This file is part of OTT.
+#
+# Copyright © 2026 Michaël Le Barbier
+# All rights reserved.
+
+# This file must be used under the terms of the MIT License.
+# This source file is licensed as described in the file LICENSE, which
+# you should have received as part of this distribution. The terms
+# are also available at https://opensource.org/licenses/MIT
+
+# The workflow expects the repository secrets AWS_ACCOUNT_ID,
+# AWS_REGION and AWS_ROLE_ARN, see OTT/DEVELOPMENT:SETUP-GITHUB-ACTION.
+# The optional secret OTT_STATE_BUCKET names the Terraform state bucket,
+# which is otherwise inferred from the account and the repository.
+
+name: Destroy infrastructure
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: ott-infrastructure
+
+jobs:
+  destroy-infrastructure:
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      OTT_STATE_BUCKET: ${{ secrets.OTT_STATE_BUCKET }}
+      GITHUB_ORG: ${{ github.repository_owner }}
+      GITHUB_REPO: ${{ github.event.repository.name }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: Install SBCL and Quicklisp
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes sbcl curl
+          curl -fsSL -o /tmp/quicklisp.lisp https://beta.quicklisp.org/quicklisp.lisp
+          sbcl --noinform --non-interactive \
+            --load /tmp/quicklisp.lisp \
+            --eval '(quicklisp-quickstart:install)'
+      - name: Destroy infrastructure
+        run: |
+          sbcl --noinform --non-interactive \
+            --load "${HOME}/quicklisp/setup.lisp" \
+            --eval "(pushnew #p\"${GITHUB_WORKSPACE}/\" asdf:*central-registry* :test #'equal)" \
+            --eval '(ql:quickload "ott/operation" :silent t)' \
+            --eval '(print (ott/operation:destroy-infrastructure))'
+
+# End of file `destroy-infrastructure.yml'

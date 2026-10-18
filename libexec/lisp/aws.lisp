@@ -175,7 +175,7 @@ Signal an AWS-SETUP-ERROR when the command fails."
 (defun aws-bucket-name ()
   "The name of the S3 bucket holding the Terraform state."
   (truncate-name
-   (sanitize-name (format nil "ott-tfstate-~A-~A-~A"
+   (sanitize-name (format nil "ott-terraform-~A-~A-~A"
 			  *aws-account* *github-organization* *github-repository*)
 		  :allowed "-")
    63))
@@ -206,7 +206,7 @@ Signal an AWS-SETUP-ERROR when the command fails."
 (defun aws-region ()
   (or (environment-parameter "AWS_REGION")
       (environment-parameter "AWS_DEFAULT_REGION")
-      "eu-west-1"))
+      "eu-west-3"))
 
 (defun aws-labels (expiry-date)
   "The labels applied to every resource of the setup, as an alist."

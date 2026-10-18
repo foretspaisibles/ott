@@ -15,6 +15,7 @@
 
 (define-testcase run-all-tests ()
   (bootstrap)
-  (setup-aws-and-github-actions))
+  (setup-aws-and-github-actions)
+  (create-infrastructure))
 
 ;;;; End of file `entrypoint.lisp'
