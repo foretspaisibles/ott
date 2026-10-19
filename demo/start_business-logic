@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Load the BUSINESS-LOGIC micro service system and run its processing loop.
+set -eu
+. "$(dirname "$0")/common.sh"
+run_lisp '(ott:run-service "business-logic")' ott/business-logic

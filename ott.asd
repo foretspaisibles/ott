@@ -26,6 +26,7 @@
 		 (:file "events")
 		 (:file "continuation")
 		 (:file "cps")
+		 (:file "service")
 		 (:file "entrypoint")))))
 
 (asdf:defsystem #:ott/warehouse

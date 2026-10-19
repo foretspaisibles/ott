@@ -51,3 +51,49 @@ under *Secrets and variables*, *Actions*.
 The setup expires after one week: extend it with
 `OTT/DEVELOPMENT:EXTEND-AWS-LEASE` and reclaim it with
 `OTT/DEVELOPMENT:TEAR-DOWN-AWS`.
+
+# Running the demos
+
+The scripts in `demo/` use SBCL and Quicklisp (`~/quicklisp/setup.lisp`
+or `~/Library/QuickLisp/setup.lisp`, or the file named by the
+environment variable `QUICKLISP_SETUP`).
+
+## Monolith
+
+```bash
+demo/run_monolith
+```
+
+Loads the system `ott/business-logic` with every micro-service in the
+same Lisp image, in the `:MONOLITH` calling convention, checks out the
+five demo orders and returns the happy order. Services are plain
+function calls and nothing touches AWS.
+
+## Mesh
+
+The mesh needs the infrastructure of the queue `ott-continuation` and
+the AWS CLI authenticated on its account. Start each micro-service in
+its own terminal:
+
+```bash
+demo/start_payment
+demo/start_warehouse
+demo/start_shipping
+demo/start_business-logic
+```
+
+Each service prints its name, PID and calling convention (`:MESH`),
+checks before anything else that AWS authentication works and that
+it can reach the queue (it exits with status 1 otherwise), then handles
+the events it owns, tracing each one. Stop it with Control-C: it shuts
+down cleanly. Then, in a fifth terminal:
+
+```bash
+demo/run_mesh              # the happy order
+demo/run_mesh no-credit    # or out-of-stock, bad-address, absent-recipient
+```
+
+It sends the checkout of a demo order on the queue and returns at once
+with the run identifier. The events travel between the terminals of the
+services, and the result of the run shows as a `COMPLETE` line in the
+terminal of `demo/start_business-logic`.

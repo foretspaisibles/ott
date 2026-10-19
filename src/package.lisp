@@ -45,6 +45,7 @@
    #:receive-message
    #:register-event-handler
    #:run-result
+   #:run-service
    #:send-a
    #:send-event
    #:send-message

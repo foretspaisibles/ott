@@ -97,15 +97,16 @@ PROPERTIES is a plist of other entries, with values encoded by ENCODE-DATA."
 
 (defun handle-service-call (name event)
   "Apply the service function NAME to the arguments of EVENT, and send the
-value to the continuation that EVENT carries."
+value to the continuation that EVENT carries.
+The continuation is opaque to the micro-service, which may not know the package
+of the business logic: its logic and frame are sent back as they were received."
   (let* ((payload (event-payload event))
-	 (value (apply name (decode-data (gethash "arguments" payload)))))
-    (send-event
-     (make-event :resume (event-id event)
-		 (continuation-payload (decode-data (gethash "logic" payload))
-				       (gethash "step" payload)
-				       (decode-data (gethash "frame" payload))
-				       "value" value)))))
+	 (value (apply name (decode-data (gethash "arguments" payload))))
+	 (resume (make-hash-table :test 'equal)))
+    (dolist (key '("logic" "step" "frame"))
+      (setf (gethash key resume) (gethash key payload)))
+    (setf (gethash "value" resume) (encode-data value))
+    (send-event (make-event :resume (event-id event) resume))))
 
 (defun register-service-function (name)
   "Mark the symbol NAME as a service function, and handle the events of its calls."

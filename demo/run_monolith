@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Load the Lisp system as MONOLITH and perform the demo Task.
+set -eu
+. "$(dirname "$0")/common.sh"
+LISP_FILE="${demo_directory}/demo.lisp" run_lisp "(progn (ott/demo:run-monolith) 0)" ott/business-logic

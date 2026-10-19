@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Perform the demo Task in the MESH: send the checkout of a demo order
+# (default happy, or :out-of-stock, :no-credit, :bad-address, :absent-recipient)
+# on the continuation queue.  The micro-services must be running.
+set -eu
+. "$(dirname "$0")/common.sh"
+kind=${1:-happy}
+LISP_FILE="${demo_directory}/demo.lisp" run_lisp "(progn (ott/demo:run-mesh :${kind}) 0)" ott/business-logic
