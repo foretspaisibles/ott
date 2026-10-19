@@ -120,7 +120,7 @@
 (define-testcase testsuite-labels ()
   (flet ((expand (form)
 	   (macroexpand-1 form)))
-    ;; A local function cannot call itself, nor one defined after it.
+    ;; A local function cannot call itself, directly or not.
     (assert-condition
      (expand '(ott:define-business-logic testsuite-bad (x)
 	       (labels ((again (n) (warehouse:stock-level (again n))))
@@ -128,15 +128,30 @@
      ott:cannot-rewrite)
     (assert-condition
      (expand '(ott:define-business-logic testsuite-bad (x)
-	       (labels ((first-step (n) (second-step n))
-			(second-step (n) (warehouse:stock-level n)))
-		 (first-step x))))
+	       (labels ((ping (n) (warehouse:stock-level (pong n)))
+			(pong (n) (ping n)))
+		 (ping x))))
      ott:cannot-rewrite)
-    ;; A function can call the ones defined before it.
+    ;; A function can call one defined after it.
     (expand '(ott:define-business-logic testsuite-good (x)
-	      (labels ((stock (item) (warehouse:stock-level item))
-		       (twice (sku) (* 2 (stock sku))))
+	      (labels ((first-step (n) (second-step n))
+		       (second-step (n) (warehouse:stock-level n)))
+		(first-step x))))
+    ;; A function can be called many times.
+    (expand '(ott:define-business-logic testsuite-good (x)
+	      (labels ((stock (sku) (let ((level (warehouse:stock-level sku))) level))
+		       (twice (sku) (+ (stock sku) (stock sku))))
 		(twice x))))))
+
+(define-testcase testsuite-labels-evaluation ()
+  (ott:define-business-logic testsuite-labels-logic (sku)
+    (labels ((stock (sku) (let ((level (warehouse:stock-level sku))) level))
+	     (twice (sku) (+ (stock sku) (stock sku))))
+      (list (twice sku) (stock sku))))
+  (dolist (convention '(:monolith :mesh))
+    (business-logic:reset-demo-data)
+    (assert-equal '(10 5)
+		  (quietly (business-logic::run-logic convention #'testsuite-labels-logic "KB-100")))))
 
 (define-testcase testsuite-service-call-in-macro-expansion ()
   ;; The service call only shows once the macro is expanded.

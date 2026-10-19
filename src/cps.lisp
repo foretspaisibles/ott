@@ -229,27 +229,64 @@ A value computed before a service call is bound to a variable."
 (defun cps-labels (form env k)
   (let ((*local-functions* *local-functions*)
 	(definitions (second form)))
-    (loop :for ((name lambda-list . body) . later) :on definitions
-	  :do (when (intersection lambda-list lambda-list-keywords)
-		(cps-unsupported form "the local functions have only required parameters"))
-	      (when (or (service-function-p name) (fboundp name))
-		(cps-unsupported form (format nil "~A is already a function" name)))
-	      (dolist (other (cons (list name) later))
-		(when (mentions-p (first other) body)
-		  (cps-unsupported form (format nil "~A calls ~A, a function defined at or after it"
-						name (first other)))))
-	      (push (list* name lambda-list body) *local-functions*))
+    (dolist (definition definitions)
+      (destructuring-bind (name lambda-list &rest body) definition
+	(when (intersection lambda-list lambda-list-keywords)
+	  (cps-unsupported form "the local functions have only required parameters"))
+	(when (or (service-function-p name) (fboundp name))
+	  (cps-unsupported form (format nil "~A is already a function" name)))
+	(push (list* name lambda-list body) *local-functions*)))
+    ;; A call is replaced by the body of the function, so recursion never ends.
+    (labels ((callees (name)
+	       (loop :for (other nil . body) :in definitions
+		     :when (mentions-p name body)
+		       :collect other))
+	     (check (name path)
+	       (when (member name path)
+		 (cps-unsupported form (format nil "~A is recursive" name)))
+	       (dolist (callee (callees name))
+		 (check callee (cons name path)))))
+      (dolist (definition definitions)
+	(check (first definition) nil)))
     (cps-progn (cddr form) env k)))
+
+(defun rename-variables (renaming form)
+  "FORM where the symbols of the alist RENAMING are replaced, except in quoted data."
+  (cond ((symbolp form) (let ((entry (assoc form renaming))) (if entry (cdr entry) form)))
+	((atom form) form)
+	((eq (first form) 'quote) form)
+	(t (cons (rename-variables renaming (car form))
+		 (rename-variables renaming (cdr form))))))
 
 (defun cps-local-call (form env k)
   "Rewrite the call FORM of a function of LABELS as the body of the function
-in a LET of its parameters."
+in a LET of its parameters.  Like the body of a macro, it sees the variables
+at the call site, among them the parameters of the functions that call it.
+A parameter that is already in scope is renamed, so that an argument can have
+its name, and the variables of the body are out of scope once it is done, so
+that a function can be called many times."
   (destructuring-bind (lambda-list &rest body) (rest (assoc (first form) *local-functions*))
     (unless (= (length lambda-list) (length (rest form)))
       (cps-unsupported form "the number of arguments does not match the parameters"))
-    (let ((expansion `(let ,(mapcar #'list lambda-list (rest form)) ,@body)))
+    (let* ((renaming (loop :for parameter :in lambda-list
+			     :collect (cons parameter (if (member parameter env)
+							  (gensym (symbol-name parameter))
+							  parameter))))
+	   (expansion `(let ,(mapcar (lambda (entry argument) (list (cdr entry) argument))
+				     renaming (rest form))
+			 ,@(rename-variables renaming body))))
       (push (cons expansion form) *macro-origins*)
-      (cps expansion env k))))
+      (cps expansion env
+	   (make-kont (lambda (value inner-env)
+			(let ((live-env (remove-if-not (lambda (variable) (member variable env))
+						       inner-env)))
+			  (if (and (symbolp value) (member value inner-env) (not (member value env)))
+			      ;; The value is a variable of the body, move it to a variable that lives on.
+			      (let ((variable (gensym "V")))
+				`(let ((,variable ,value))
+				   ,(kall k variable (adjoin variable live-env))))
+			      (kall k value live-env))))
+		      (kont-small k))))))
 
 (defun normalize-binding (binding)
   (if (consp binding)

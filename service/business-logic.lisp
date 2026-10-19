@@ -110,35 +110,33 @@ a restocking fee of 10%."
 The value is (:COMPLETED ...), (:REJECTED REASON ...) before anything was
 shipped, or (:CANCELLED REASON) when shipping failed and the order was undone.
 The reserved items and the payment are undone unless the order is completed."
-  (labels ((deliver-order (paid-with)
-	     "Ship the order and follow the delivery."
+  (labels ((reserve-items ()
+             (warehouse:with-items-reservation
+	         (reservation (order-items order)
+	                      :unavailable (rejected :out-of-stock (getf reservation :missing))
+	                      :keep-if #'completedp)
+               (capture-payment)))
+           (capture-payment ()
+             (if (payment:check-credit (order-user order) (order-price order))
+                 (payment:with-captured-payment
+	             ((payment payment-id) (order-user order) (order-price order)
+	                                   :declined (rejected :payment-declined)
+	                                   :keep-if #'completedp)
+	           (ship-order payment-id))
+                 (rejected :insufficient-credit)))
+           (ship-order (paid-with)
 	     (let ((shipment (shipping:dispatch-items (order-id order)
 						      (order-items order)
 						      (order-address order))))
-	       (cond
-		 ((not (shipping:dispatched-p shipment))
-		  (cancelled :address-not-found))
-		 (t
-		  (ott:with-properties ((shipment-id :shipment-id)) shipment
-		    (let ((delivery (shipping:track-delivery shipment-id)))
-		      (cond
-			((shipping:delivered-p delivery)
-			 (completed :payment-id paid-with :shipment-id shipment-id))
-			(t
-			 (cancelled :returned-to-sender))))))))))
-    (warehouse:with-items-reservation
-	(reservation (order-items order)
-	 :unavailable (rejected :out-of-stock (getf reservation :missing))
-	 :keep-if #'completedp)
-      (cond
-	((not (payment:check-credit (order-user order) (order-price order)))
-	 (rejected :insufficient-credit))
-	(t
-	 (payment:with-captured-payment
-	     ((payment payment-id) (order-user order) (order-price order)
-	      :declined (rejected :payment-declined)
-	      :keep-if #'completedp)
-	   (deliver-order payment-id)))))))
+               (if (shipping:dispatched-p shipment)
+		   (ott:with-properties ((shipment-id :shipment-id)) shipment
+                     (follow-delivery (shipping:track-delivery shipment-id)))
+	           (cancelled :address-not-found))))
+           (follow-delivery (delivery)
+	     (if (shipping:delivered-p delivery)
+		 (completed :payment-id paid-with :shipment-id shipment-id)
+		 (cancelled :returned-to-sender))))
+    (reserve-items)))
 
 (define-business-logic process-return (order payment-id shipment-id reason)
   "Process the return of a delivered ORDER, REASON is :DEFECTIVE or :CHANGED-MIND.

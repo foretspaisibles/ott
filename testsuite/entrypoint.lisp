@@ -20,6 +20,7 @@
   (testsuite-rewriting)
   (testsuite-cannot-rewrite)
   (testsuite-labels)
+  (testsuite-labels-evaluation)
   (testsuite-service-call-in-macro-expansion)
   (testsuite-checkout)
   (testsuite-checkout-leaves-consistent-state)
