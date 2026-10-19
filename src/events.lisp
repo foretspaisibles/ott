@@ -31,6 +31,14 @@
 ;;;; Events
 ;;;;
 
+(defvar *event-handlers* (make-hash-table :test 'eq)
+  "The dictionary of event types.  It maps a type, a keyword, to the function
+that handles the events of this type.")
+
+(defun register-event-handler (type handler)
+  "Handle the events of TYPE with HANDLER, a function designator."
+  (setf (gethash type *event-handlers*) handler))
+
 (define-condition unknown-event-type (error)
   ((type
     :initarg :type
@@ -60,10 +68,12 @@
 The type of an event of unknown type is the string found in STRING."
   (let* ((table (yason:parse string))
 	 (type (gethash "type" table)))
-    (make-event (or (find type '(:a :b) :test #'string-equal) type)
+    (make-event (or (loop :for known :being :the :hash-keys :of *event-handlers*
+			  :when (string-equal known type)
+			    :return known)
+		    type)
 		(gethash "id" table)
 		(gethash "payload" table))))
-
 
 ;;;;
 ;;;; Handlers
@@ -93,10 +103,50 @@ The type of an event of unknown type is the string found in STRING."
 
 (defun dispatch (event)
   "Dispatch EVENT on its type, signal UNKNOWN-EVENT-TYPE for an unknown type."
-  (case (event-type event)
-    (:a (handle-a event))
-    (:b (handle-b event))
-    (otherwise (error 'unknown-event-type :type (event-type event)))))
+  (let ((handler (gethash (event-type event) *event-handlers*)))
+    (unless handler
+      (error 'unknown-event-type :type (event-type event)))
+    (funcall handler event)))
+
+(register-event-handler :a 'handle-a)
+
+(register-event-handler :b 'handle-b)
+
+(defvar *local-queue* nil
+  "When non-NIL, a LOCAL-QUEUE that carries the events instead of SQS.")
+
+(defstruct (local-queue (:constructor make-local-queue ()))
+  "An in-memory continuation queue, it holds the JSON of the events."
+  (messages nil))
+
+(defmacro with-local-queue (&body body)
+  "Evaluate BODY with events sent to an in-memory queue instead of SQS."
+  `(let ((*local-queue* (make-local-queue)))
+     ,@body))
+
+(defun send-event (event)
+  "Send EVENT to the continuation queue, SQS or the local queue when there is one.
+The local queue holds JSON, so that events go through the same encoding as on SQS."
+  (if *local-queue*
+      (let ((json (event-json event)))
+	(trace-event "SEND ~A" json)
+	(setf (local-queue-messages *local-queue*)
+	      (append (local-queue-messages *local-queue*) (list json))))
+      (send-message (queue-url) event)))
+
+(defun drain-local-queue (&key (limit 10000))
+  "Dispatch the events of the local queue until it is empty, return their number.
+Signal an error when more than LIMIT events are handled, which means events
+keep begetting events."
+  (let ((count 0))
+    (loop :while (local-queue-messages *local-queue*)
+	  :do (when (>= count limit)
+		(error "The local queue still holds events after ~D of them." limit))
+	      (incf count)
+	      (let ((json (pop (local-queue-messages *local-queue*))))
+		(trace-event "RECEIVE ~A" json)
+		(dispatch (parse-event json))))
+    count))
 
 (defun send-a (&key (id (generate-id)) payload)
   "Send an A event to the continuation queue and return its identifier."

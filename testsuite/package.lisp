@@ -17,7 +17,10 @@
    #:define-testcase
    #:define-assertion
    #:assert-t
+   #:assert-nil
    #:assert-eq
+   #:assert-equal
+   #:assert-condition
    #:assert-set-equal
    #:assert-string=
    #:assert-type))

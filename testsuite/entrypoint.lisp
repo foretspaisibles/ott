@@ -14,6 +14,14 @@
 (in-package #:ott/testsuite)
 
 (define-testcase run-all-tests ()
-  (assert-t t))
+  (testsuite-event-dictionary)
+  (testsuite-custom-event-handler)
+  (testsuite-data-encoding)
+  (testsuite-rewriting)
+  (testsuite-cannot-rewrite)
+  (testsuite-checkout)
+  (testsuite-checkout-leaves-consistent-state)
+  (testsuite-return)
+  (testsuite-micro-service-dependencies))
 
 ;;;; End of file `entrypoint.lisp'

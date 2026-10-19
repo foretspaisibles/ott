@@ -24,7 +24,48 @@
                  (:file "utilities")
 		 (:file "queue")
 		 (:file "events")
+		 (:file "continuation")
+		 (:file "cps")
 		 (:file "entrypoint")))))
+
+(asdf:defsystem #:ott/warehouse
+  :description "OTT micro-service: the warehouse"
+  :author "Michaël Le Barbier"
+  :license "MIT License"
+  :depends-on (#:ott)
+  :components
+  ((:module "service"
+    :components ((:file "warehouse")))))
+
+(asdf:defsystem #:ott/payment
+  :description "OTT micro-service: payments"
+  :author "Michaël Le Barbier"
+  :license "MIT License"
+  :depends-on (#:ott)
+  :components
+  ((:module "service"
+    :components ((:file "payment")))))
+
+(asdf:defsystem #:ott/shipping
+  :description "OTT micro-service: shipping"
+  :author "Michaël Le Barbier"
+  :license "MIT License"
+  :depends-on (#:ott)
+  :components
+  ((:module "service"
+    :components ((:file "shipping")))))
+
+(asdf:defsystem #:ott/business-logic
+  :description "OTT micro-service: the business logic of the retail demo"
+  :author "Michaël Le Barbier"
+  :license "MIT License"
+  :depends-on (#:ott
+	       #:ott/warehouse
+	       #:ott/payment
+	       #:ott/shipping)
+  :components
+  ((:module "service"
+    :components ((:file "business-logic")))))
 
 (asdf:defsystem #:ott/testsuite
   :description "OBI Meetup talk: centralised business logic in a decentralized architecture"
@@ -32,11 +73,14 @@
   :license "MIT License"
   :depends-on (#:alexandria
 	       #:org.melusina.confidence
-	       #:ott)
+	       #:ott
+	       #:ott/business-logic)
   :components
   ((:module "testsuite"
     :components ((:file "package")
 		 (:file "utilities")
+		 (:file "continuation")
+		 (:file "retail")
 		 (:file "entrypoint")))))
 
 (asdf:defsystem #:ott/development

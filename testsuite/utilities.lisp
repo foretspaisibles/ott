@@ -13,4 +13,9 @@
 
 (in-package #:ott/testsuite)
 
+(defmacro quietly (&body body)
+  "Evaluate BODY without the trace of the events on *TRACE-OUTPUT*."
+  `(let ((*trace-output* (make-broadcast-stream)))
+     ,@body))
+
 ;;;; End of file `utilities.lisp'

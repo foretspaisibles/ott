@@ -15,12 +15,17 @@
   (:use #:common-lisp)
   (:export
    #:*aws-program*
+   #:*calling-convention*
    #:*clock*
    #:*queue-name*
    #:*role-name*
    #:aws-error
+   #:cannot-rewrite
+   #:define-business-logic
+   #:define-service-function
    #:delete-message
    #:dispatch
+   #:drain-local-queue
    #:event-id
    #:event-json
    #:event-payload
@@ -38,9 +43,13 @@
    #:parse-event
    #:queue-url
    #:receive-message
+   #:register-event-handler
+   #:run-result
    #:send-a
+   #:send-event
    #:send-message
-   #:unknown-event-type))
+   #:unknown-event-type
+   #:with-local-queue))
 
 (in-package #:ott)
 
