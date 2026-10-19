@@ -13,4 +13,20 @@
 
 (in-package #:ott)
 
+(defmacro with-properties (properties plist &body body)
+  "Evaluate BODY with variables bound to the values of properties of PLIST.
+Each element of PROPERTIES is either a symbol, naming a variable and the
+keyword of its property, or (VARIABLE KEYWORD).  Like WITH-SLOTS for plists,
+except that the variables are bound once, not aliased.
+
+Business logic cannot use SYMBOL-MACROLET, so the variables are bound with LET."
+  (let ((plist-variable (gensym "PLIST")))
+    `(let* ((,plist-variable ,plist)
+	    ,@(loop :for property :in properties
+		    :for (variable keyword) := (if (consp property)
+						   property
+						   (list property (intern (symbol-name property) :keyword)))
+		    :collect `(,variable (getf ,plist-variable ,keyword))))
+       ,@body)))
+
 ;;;; End of file `utilities.lisp'

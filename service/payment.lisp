@@ -18,10 +18,12 @@
   (:import-from #:ott #:define-service-function)
   (:export
    #:capture-amount
+   #:captured-p
    #:check-credit
    #:credit
    #:refund-amount
-   #:reset-demo-data))
+   #:reset-demo-data
+   #:with-captured-payment))
 
 (in-package #:payment)
 
@@ -62,6 +64,28 @@ The value is (:STATUS :CAPTURED :PAYMENT-ID ID), or (:STATUS :DECLINED)."
 	   (list :status :captured :payment-id id)))
 	(t
 	 (list :status :declined))))
+
+(defun captured-p (payment)
+  "True when PAYMENT is the value of a successful CAPTURE-AMOUNT."
+  (eq (getf payment :status) :captured))
+
+(defmacro with-captured-payment (((payment payment-id) user amount &key declined keep-if) &body body)
+  "Capture AMOUNT on the credit of USER and evaluate BODY, or DECLINED when
+the capture fails.  PAYMENT is bound to the value of CAPTURE-AMOUNT and
+PAYMENT-ID to the identifier of the payment.  The value is the one of BODY,
+and the amount is refunded unless the function designated by KEEP-IF is true
+of this value.  See WAREHOUSE:WITH-ITEMS-RESERVATION for the cleanup by value."
+  (let ((amount-variable (gensym "AMOUNT"))
+	(outcome (gensym "OUTCOME")))
+    `(let* ((,amount-variable ,amount)
+	    (,payment (capture-amount ,user ,amount-variable)))
+       (if (captured-p ,payment)
+	   (let* ((,payment-id (getf ,payment :payment-id))
+		  (,outcome (progn ,@body)))
+	     (unless (funcall ,keep-if ,outcome)
+	       (refund-amount ,payment-id ,amount-variable))
+	     ,outcome)
+	   ,declined))))
 
 (define-service-function refund-amount (payment-id amount)
   "Refund AMOUNT of the payment PAYMENT-ID, at most what it captured.

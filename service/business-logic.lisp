@@ -89,41 +89,56 @@ a restocking fee of 10%."
 ;;;; Business logic
 ;;;;
 
+(defun completed (&rest details)
+  "The outcome of an order that was shipped and delivered."
+  (list* :completed details))
+
+(defun rejected (reason &rest details)
+  "The outcome of an order that was refused before anything was shipped."
+  (list* :rejected reason details))
+
+(defun cancelled (reason)
+  "The outcome of an order that was undone after shipping failed."
+  (list :cancelled reason))
+
+(defun completedp (outcome)
+  "True when OUTCOME is the one of a completed order."
+  (eq (first outcome) :completed))
+
 (define-business-logic checkout (order)
   "Check out ORDER: reserve the items, take the payment and ship them.
 The value is (:COMPLETED ...), (:REJECTED REASON ...) before anything was
-shipped, or (:CANCELLED REASON) when shipping failed and the order was undone."
-  (let ((reservation (warehouse:reserve-items (order-items order))))
-    (if (not (eq (getf reservation :status) :reserved))
-	(list :rejected :out-of-stock (getf reservation :missing))
-	(if (not (payment:check-credit (order-user order) (order-price order)))
-	    (progn
-	      (warehouse:release-items (order-items order))
-	      (list :rejected :insufficient-credit))
-	    (let ((payment (payment:capture-amount (order-user order) (order-price order))))
-	      (if (not (eq (getf payment :status) :captured))
-		  (progn
-		    (warehouse:release-items (order-items order))
-		    (list :rejected :payment-declined))
-		  (let ((shipment (shipping:dispatch-items (order-id order)
-							   (order-items order)
-							   (order-address order))))
-		    (if (not (eq (getf shipment :status) :dispatched))
-			;; The carrier cannot find the address, undo the order.
-			(progn
-			  (warehouse:release-items (order-items order))
-			  (payment:refund-amount (getf payment :payment-id) (order-price order))
-			  (list :cancelled :address-not-found))
-			(case (getf (shipping:track-delivery (getf shipment :shipment-id)) :status)
-			  (:delivered
-			   (list :completed
-				 :payment-id (getf payment :payment-id)
-				 :shipment-id (getf shipment :shipment-id)))
-			  (otherwise
-			   ;; The package came back, undo the order.
-			   (warehouse:receive-return (order-items order) :undelivered)
-			   (payment:refund-amount (getf payment :payment-id) (order-price order))
-			   (list :cancelled :returned-to-sender)))))))))))
+shipped, or (:CANCELLED REASON) when shipping failed and the order was undone.
+The reserved items and the payment are undone unless the order is completed."
+  (labels ((deliver-order (paid-with)
+	     "Ship the order and follow the delivery."
+	     (let ((shipment (shipping:dispatch-items (order-id order)
+						      (order-items order)
+						      (order-address order))))
+	       (cond
+		 ((not (shipping:dispatched-p shipment))
+		  (cancelled :address-not-found))
+		 (t
+		  (ott:with-properties ((shipment-id :shipment-id)) shipment
+		    (let ((delivery (shipping:track-delivery shipment-id)))
+		      (cond
+			((shipping:delivered-p delivery)
+			 (completed :payment-id paid-with :shipment-id shipment-id))
+			(t
+			 (cancelled :returned-to-sender))))))))))
+    (warehouse:with-items-reservation
+	(reservation (order-items order)
+	 :unavailable (rejected :out-of-stock (getf reservation :missing))
+	 :keep-if #'completedp)
+      (cond
+	((not (payment:check-credit (order-user order) (order-price order)))
+	 (rejected :insufficient-credit))
+	(t
+	 (payment:with-captured-payment
+	     ((payment payment-id) (order-user order) (order-price order)
+	      :declined (rejected :payment-declined)
+	      :keep-if #'completedp)
+	   (deliver-order payment-id)))))))
 
 (define-business-logic process-return (order payment-id shipment-id reason)
   "Process the return of a delivered ORDER, REASON is :DEFECTIVE or :CHANGED-MIND.

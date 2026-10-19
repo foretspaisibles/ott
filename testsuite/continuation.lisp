@@ -105,6 +105,45 @@
     (assert-condition
      (expand '(ott:define-business-logic testsuite-bad (&optional x)
 	       (warehouse:stock-level x)))
-     error)))
+     error)
+    ;; The report names the macro that introduced the shadowing variable.
+    (handler-case
+	(progn
+	  (expand '(ott:define-business-logic testsuite-bad (x)
+		    (ott:with-properties ((x :x)) (list :x "KB-100") (warehouse:stock-level x))))
+	  (assert-t nil))
+      (ott:cannot-rewrite (condition)
+	(assert-t (and (search "in the expansion of (OTT:WITH-PROPERTIES"
+			       (princ-to-string condition))
+		       t))))))
+
+(define-testcase testsuite-labels ()
+  (flet ((expand (form)
+	   (macroexpand-1 form)))
+    ;; A local function cannot call itself, nor one defined after it.
+    (assert-condition
+     (expand '(ott:define-business-logic testsuite-bad (x)
+	       (labels ((again (n) (warehouse:stock-level (again n))))
+		 (again x))))
+     ott:cannot-rewrite)
+    (assert-condition
+     (expand '(ott:define-business-logic testsuite-bad (x)
+	       (labels ((first-step (n) (second-step n))
+			(second-step (n) (warehouse:stock-level n)))
+		 (first-step x))))
+     ott:cannot-rewrite)
+    ;; A function can call the ones defined before it.
+    (expand '(ott:define-business-logic testsuite-good (x)
+	      (labels ((stock (item) (warehouse:stock-level item))
+		       (twice (sku) (* 2 (stock sku))))
+		(twice x))))))
+
+(define-testcase testsuite-service-call-in-macro-expansion ()
+  ;; The service call only shows once the macro is expanded.
+  (let ((rewritten (macroexpand-1 '(ott:define-business-logic testsuite-hidden (items)
+				    (warehouse:with-items-reservation
+					(reservation items :keep-if #'identity)
+				      nil)))))
+    (assert-t (and (search "CALL-SERVICE" (prin1-to-string rewritten)) t))))
 
 ;;;; End of file `continuation.lisp'

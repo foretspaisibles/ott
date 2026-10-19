@@ -19,6 +19,8 @@
   (testsuite-data-encoding)
   (testsuite-rewriting)
   (testsuite-cannot-rewrite)
+  (testsuite-labels)
+  (testsuite-service-call-in-macro-expansion)
   (testsuite-checkout)
   (testsuite-checkout-leaves-consistent-state)
   (testsuite-return)

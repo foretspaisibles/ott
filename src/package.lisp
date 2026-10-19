@@ -50,7 +50,8 @@
    #:send-event
    #:send-message
    #:unknown-event-type
-   #:with-local-queue))
+   #:with-local-queue
+   #:with-properties))
 
 (in-package #:ott)
 

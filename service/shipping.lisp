@@ -19,7 +19,9 @@
   (:use #:common-lisp)
   (:import-from #:ott #:define-service-function)
   (:export
+   #:delivered-p
    #:dispatch-items
+   #:dispatched-p
    #:reset-demo-data
    #:schedule-pickup
    #:track-delivery))
@@ -69,6 +71,14 @@ or (:STATUS :UNKNOWN-SHIPMENT)."
 	   (list :status :returned-to-sender :attempts 3))
 	  (t
 	   (list :status :delivered)))))
+
+(defun dispatched-p (shipment)
+  "True when SHIPMENT is the value of a successful DISPATCH-ITEMS."
+  (eq (getf shipment :status) :dispatched))
+
+(defun delivered-p (delivery)
+  "True when DELIVERY is the value of TRACK-DELIVERY for a delivered package."
+  (eq (getf delivery :status) :delivered))
 
 (define-service-function schedule-pickup (shipment-id)
   "Schedule the pickup of the package of the delivered shipment SHIPMENT-ID.

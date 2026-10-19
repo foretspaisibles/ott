@@ -17,9 +17,11 @@
   (:use #:common-lisp)
   (:import-from #:ott #:define-service-function)
   (:export
+   #:with-items-reservation
    #:receive-return
    #:release-items
    #:reserve-items
+   #:reserved-p
    #:reset-demo-data
    #:stock-level))
 
@@ -66,6 +68,31 @@ The value is (:STATUS :RESERVED), or (:STATUS :OUT-OF-STOCK :MISSING SKUS)."
   "Put the reserved ITEMS back in the stock."
   (add-items *stock* items)
   (list :status :released))
+
+(defun reserved-p (reservation)
+  "True when RESERVATION is the value of a successful RESERVE-ITEMS."
+  (eq (getf reservation :status) :reserved))
+
+(defmacro with-items-reservation ((reservation items &key unavailable keep-if) &body body)
+  "Reserve ITEMS and evaluate BODY, or UNAVAILABLE when they cannot be reserved.
+RESERVATION is bound to the value of RESERVE-ITEMS in both cases.  The value is
+the one of BODY, and the items are released unless the function designated by
+KEEP-IF is true of this value.
+
+This is UNWIND-PROTECT for business logic, and like it, it cleans up after BODY.
+The cleanup is by value, not by non-local exit: the logic is rewritten in
+continuation-passing style, which supports neither UNWIND-PROTECT nor the
+non-local exits that would trigger it."
+  (let ((items-variable (gensym "ITEMS"))
+	(outcome (gensym "OUTCOME")))
+    `(let* ((,items-variable ,items)
+	    (,reservation (reserve-items ,items-variable)))
+       (if (reserved-p ,reservation)
+	   (let ((,outcome (progn ,@body)))
+	     (unless (funcall ,keep-if ,outcome)
+	       (release-items ,items-variable))
+	     ,outcome)
+	   ,unavailable))))
 
 (define-service-function receive-return (items reason)
   "Receive ITEMS that came back for REASON.

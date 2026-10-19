@@ -20,7 +20,10 @@
 ;;;; and a step number are all it takes to resume the logic in another process.
 ;;;;
 ;;;; The rewriting handles PROGN, IF, WHEN, UNLESS, COND, CASE, LET, LET*,
-;;;; function calls and macros that expand into these.  A form that does not
+;;;; LABELS, function calls and macros that expand into these.  The functions
+;;;; of LABELS break a logic down into named steps: a call is replaced by the
+;;;; body of the function, so a function can call the ones defined before it
+;;;; but not itself.  A form that does not
 ;;;; call a service function is left alone.  Variables must not be shadowed.
 
 (define-condition cannot-rewrite (error)
@@ -39,6 +42,14 @@ position the rewriting does not support."))
 
 (defvar *logic-name* nil
   "The name of the business logic being rewritten.")
+
+(defvar *macro-origins* nil
+  "An alist of the forms the macros of the business logic being rewritten
+expanded into, with the macro forms they come from.")
+
+(defvar *local-functions* nil
+  "The functions of the LABELS forms in scope, an alist of names and
+definitions (LAMBDA-LIST . BODY).")
 
 (defvar *steps* nil
   "The forms of the steps of the business logic being rewritten, an adjustable vector.")
@@ -95,15 +106,34 @@ The variables of JOIN-ENV are in scope at every jump to the join point."
 ;;;;
 
 (defun service-call-p (form)
-  "True when FORM contains a call to a service function."
+  "True when FORM contains a call to a service function, possibly in the
+expansion of a macro."
   (and (consp form)
        (not (eq (first form) 'quote))
        (or (service-function-p (first form))
+	   (assoc (first form) *local-functions*)
+	   (and (symbolp (first form))
+		(not (special-operator-p (first form)))
+		;; (LAMBDA ...) expands into (FUNCTION (LAMBDA ...)).
+		(not (eq (first form) 'lambda))
+		(macro-function (first form))
+		(service-call-p (macroexpand-1 form)))
 	   (loop :for tail :on form
-		 :thereis (service-call-p (car tail))))))
+		 :thereis (and (consp tail) (service-call-p (car tail)))))))
+
+(defun macro-origin (form)
+  "The outermost macro form that FORM is the expansion of, or NIL."
+  (let ((origin (cdr (assoc form *macro-origins* :test #'eq))))
+    (when origin
+      (or (macro-origin origin) origin))))
 
 (defun cps-unsupported (form reason)
-  (error 'cannot-rewrite :form form :reason reason))
+  (let ((origin (macro-origin form)))
+    (error 'cannot-rewrite
+	   :form form
+	   :reason (if origin
+		       (format nil "~A, in the expansion of ~S" reason origin)
+		       reason))))
 
 (defun cps (form env k)
   "A form that evaluates FORM and passes its value to the continuation K.
@@ -123,13 +153,18 @@ ENV is the list of the variables in scope."
 	   (cps `(if ,(second form) nil (progn ,@(cddr form))) env k))
 	  ((eq operator 'cond) (cps (expand-cond (rest form)) env k))
 	  ((eq operator 'case) (cps (expand-case (second form) (cddr form)) env k))
-	  ((eq operator 'let) (cps-let (second form) (cddr form) env k))
-	  ((eq operator 'let*) (cps (expand-let* (second form) (cddr form)) env k))
+	  ((eq operator 'let) (cps-let form env k))
+	  ((eq operator 'let*) (cps (expand-let* (second form) (cddr form) form) env k))
+	  ((eq operator 'labels) (cps-labels form env k))
 	  ((not (symbolp operator))
 	   (cps-unsupported form "the operator is not a symbol"))
+	  ((assoc operator *local-functions*) (cps-local-call form env k))
 	  ((special-operator-p operator)
 	   (cps-unsupported form (format nil "~A is not supported" operator)))
-	  ((macro-function operator) (cps (macroexpand-1 form) env k))
+	  ((macro-function operator)
+	   (let ((expansion (macroexpand-1 form)))
+	     (push (cons expansion form) *macro-origins*)
+	     (cps expansion env k)))
 	  (t (cps-call operator (rest form) env k))))))
 
 (defun cps-progn (forms env k)
@@ -186,27 +221,62 @@ A value computed before a service call is bound to a variable."
 		`(call-service ',(first form) (list ,@atoms) ',*logic-name* ,step
 			       (list ,@env))))))
 
+(defun mentions-p (symbol form)
+  "True when SYMBOL occurs in FORM."
+  (cond ((eq symbol form) t)
+	((consp form) (or (mentions-p symbol (car form)) (mentions-p symbol (cdr form))))))
+
+(defun cps-labels (form env k)
+  (let ((*local-functions* *local-functions*)
+	(definitions (second form)))
+    (loop :for ((name lambda-list . body) . later) :on definitions
+	  :do (when (intersection lambda-list lambda-list-keywords)
+		(cps-unsupported form "the local functions have only required parameters"))
+	      (when (or (service-function-p name) (fboundp name))
+		(cps-unsupported form (format nil "~A is already a function" name)))
+	      (dolist (other (cons (list name) later))
+		(when (mentions-p (first other) body)
+		  (cps-unsupported form (format nil "~A calls ~A, a function defined at or after it"
+						name (first other)))))
+	      (push (list* name lambda-list body) *local-functions*))
+    (cps-progn (cddr form) env k)))
+
+(defun cps-local-call (form env k)
+  "Rewrite the call FORM of a function of LABELS as the body of the function
+in a LET of its parameters."
+  (destructuring-bind (lambda-list &rest body) (rest (assoc (first form) *local-functions*))
+    (unless (= (length lambda-list) (length (rest form)))
+      (cps-unsupported form "the number of arguments does not match the parameters"))
+    (let ((expansion `(let ,(mapcar #'list lambda-list (rest form)) ,@body)))
+      (push (cons expansion form) *macro-origins*)
+      (cps expansion env k))))
+
 (defun normalize-binding (binding)
   (if (consp binding)
       (list (first binding) (second binding))
       (list binding nil)))
 
-(defun cps-let (bindings body env k)
-  (let ((variables (mapcar #'first (mapcar #'normalize-binding bindings)))
+(defun cps-let (form env k)
+  (let* ((bindings (second form))
+	 (body (cddr form))
+	 (variables (mapcar #'first (mapcar #'normalize-binding bindings)))
 	(inits (mapcar #'second (mapcar #'normalize-binding bindings))))
     (let ((shadowed (intersection variables env)))
       (when shadowed
-	(cps-unsupported `(let ,bindings ,@body)
+	(cps-unsupported form
 			 (format nil "~{~A~^, ~} would shadow a variable in scope" shadowed))))
     (cps-args inits env
 	      (lambda-kont (atoms env)
 		`(let ,(mapcar #'list variables atoms)
 		   ,(cps-progn body (append variables env) k))))))
 
-(defun expand-let* (bindings body)
+(defun expand-let* (bindings body origin)
+  "Expand a LET* form, ORIGIN, into nested LET forms that remember where they come from."
   (if (null bindings)
       `(progn ,@body)
-      `(let (,(first bindings)) ,(expand-let* (rest bindings) body))))
+      (let ((expansion `(let (,(first bindings)) ,(expand-let* (rest bindings) body origin))))
+	(push (cons expansion origin) *macro-origins*)
+	expansion)))
 
 (defun expand-cond (clauses)
   (if (null clauses)
@@ -246,6 +316,7 @@ found with RUN-RESULT in the process that handles the last event of the run."
   (let* ((documentation (when (and (stringp (first body)) (rest body))
 			  (list (pop body))))
 	 (*logic-name* name)
+	 (*macro-origins* nil)
 	 (*steps* (make-array 0 :adjustable t :fill-pointer t))
 	 (code (cps-progn body lambda-list
 			  (make-kont (lambda (form env)
